@@ -1,0 +1,26 @@
+{
+  "name": "ABRAM - Volleyball Performance Lab",
+  "short_name": "ABRAM",
+  "description": "Analisis Tes & Pertandingan Bola Voli - Aplikasi profesional untuk pencatatan tes fisik, statistik pertandingan, dan analisis performa atlet bola voli.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060b1f",
+  "theme_color": "#060b1f",
+  "lang": "id",
+  "categories": ["sports", "education", "productivity"],
+  "icons": [
+    {
+      "src": "/ABRAM.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/ABRAM.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

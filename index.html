@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/ABRAM.png" />
+    <link rel="apple-touch-icon" href="/ABRAM.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#060b1f" id="theme-color-meta" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ABRAM" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>ABRAM - Analisis Tes & Pertandingan Bola Voli | Volleyball Performance Lab</title>
+    <meta name="description" content="Aplikasi profesional untuk pencatatan tes fisik, statistik pertandingan, dan analisis performa atlet bola voli oleh Muhammad Farid, S.Pd." />
+    <meta name="keywords" content="analisis bola voli, tes fisik voli, statistik pertandingan voli, beep test, vertical jump, manajemen atlet bola voli, MF Digitalisasi" />
+    <meta name="author" content="Muhammad Farid, S.Pd." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ABRAM - Analisis Tes & Pertandingan Bola Voli" />
+    <meta property="og:description" content="Aplikasi profesional untuk pencatatan tes fisik, statistik pertandingan, dan analisis performa atlet bola voli." />
+    <meta property="og:image" content="/ABRAM.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="/ABRAM.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>
