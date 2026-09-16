@@ -1,7 +1,7 @@
 {
   "name": "ABRAM - Volleyball Performance Lab",
   "short_name": "ABRAM",
-  "description": "Analisis Tes & Pertandingan Bola Voli - Aplikasi profesional untuk pencatatan tes fisik, statistik pertandingan, dan analisis performa atlet bola voli.",
+  "description": "Analisis Tes & Atlet Bola Voli - Aplikasi profesional untuk pencatatan tes fisik, statistik , dan analisis performa atlet bola voli.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

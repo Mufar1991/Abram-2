@@ -1,5 +1,5 @@
 export type Tab = 'dashboard' | 'physical' | 'match' | 'archive';
-export type AdminTab = 'admin-dashboard' | 'admin-approval' | 'admin-manage' | 'admin-settings';
+export type AdminTab = 'admin-dashboard' | 'admin-analysis' | 'admin-manage' | 'admin-settings';
 export type ReportType = 'physical' | 'match';
 export type ReportStatus = 'pending' | 'approved' | 'rejected';
 
@@ -11,11 +11,18 @@ export type CustomTestParam = {
   unit: string;
 };
 
+export type PhysicalIndicator = {
+  id: string;
+  name: string;
+  unit: string;
+  key: string;
+};
+
 export type Report = {
   id: string;
   report_type: ReportType;
   athlete_name: string;
-  team_group: string;
+  team_group?: string;
   report_date: string;
   readiness_score: number | null;
   status: ReportStatus;
@@ -26,7 +33,6 @@ export type Report = {
 
 export type PhysicalForm = {
   athleteName: string;
-  teamGroup: string;
   date: string;
   heartRate: string;
   beepTest: string;
@@ -40,7 +46,6 @@ export type PhysicalForm = {
 
 export type MatchForm = {
   athleteName: string;
-  teamGroup: string;
   date: string;
   metrics: Record<string, TechnicalMetric>;
   zones: number[];
@@ -51,6 +56,7 @@ export type CoachSettings = {
   coach_name: string;
   pin_hash: string;
   custom_params: CustomTestParam[];
+  technique_targets: Record<string, number>;
   updated_at: string;
 };
 

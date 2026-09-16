@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState, useEffect, useMemo } from 'react';
 import {
   Activity,
   Archive,
@@ -16,12 +16,14 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import type { CustomTestParam, MatchForm, PhysicalForm, Report, ReportType, TechnicalMetric } from '@/lib/types';
+import type { MatchForm, PhysicalForm, PhysicalIndicator, Report, ReportType, TechnicalMetric } from '@/lib/types';
 import {
   formatDate,
   metricLabels,
   scoreMatch,
   scorePhysical,
+  generateRichAnalysis,
+  getScoreTier,
 } from '@/lib/utils';
 
 export function Dashboard({
@@ -66,7 +68,7 @@ export function Dashboard({
       <div className="metrics-grid">
         <MetricCard icon={<Users />} label="Total Atlet" value={String(new Set(approvedReports.map((r) => r.athlete_name)).size)} helper="dari seluruh laporan" tone="blue" />
         <MetricCard icon={<Activity />} label="Tes Fisik" value={String(approvedReports.filter((r) => r.report_type === 'physical').length)} helper="laporan tersimpan" tone="gold" />
-        <MetricCard icon={<Trophy />} label="Pertandingan" value={String(approvedReports.filter((r) => r.report_type === 'match').length)} helper="statistik dianalisis" tone="green" />
+        <MetricCard icon={<Trophy />} label="Statistik" value={String(approvedReports.filter((r) => r.report_type === 'match').length)} helper="statistik dianalisis" tone="green" />
         <MetricCard icon={<ShieldCheck />} label="Status Data" value="LIVE" helper="arsip publik aktif" tone="red" />
       </div>
 
@@ -121,7 +123,7 @@ export function ReportRow({ report, onSelect }: { report: Report; onSelect: (rep
       </div>
       <div className="report-row-main">
         <strong>{report.athlete_name}</strong>
-        <span>{report.report_type === 'physical' ? 'Tes Fisik' : 'Statistik Pertandingan'} · {report.team_group}</span>
+        <span>{report.report_type === 'physical' ? 'Tes Fisik' : 'Statistik Perindividu'}</span>
       </div>
       <div className="report-row-date">
         <CalendarDays size={14} />{formatDate(report.report_date)}
@@ -150,7 +152,7 @@ function FormShell({ children, title, description, icon }: { children: React.Rea
   );
 }
 
-function Field({ label, value, onChange, type = 'text', placeholder, suffix }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; suffix?: string }) {
+function Field({ label, value, onChange, type = 'text', placeholder, suffix, name }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; suffix?: string; name?: string }) {
   return (
     <label className="field">
       <span>{label}</span>
@@ -161,6 +163,8 @@ function Field({ label, value, onChange, type = 'text', placeholder, suffix }: {
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           required={label.includes('Nama') || label.includes('Tanggal')}
+          autoComplete="off"
+          name={name || `field_${label.toLowerCase().replace(/\s+/g, '_')}`}
         />
         {suffix && <small>{suffix}</small>}
       </div>
@@ -168,127 +172,58 @@ function Field({ label, value, onChange, type = 'text', placeholder, suffix }: {
   );
 }
 
-function getScoreTier(score: number): { label: string; color: string } {
-  if (score >= 85) return { label: 'Sangat Prima', color: 'var(--success)' };
-  if (score >= 75) return { label: 'Prima', color: 'var(--success)' };
-  if (score >= 65) return { label: 'Cukup', color: 'var(--warning)' };
-  if (score >= 50) return { label: 'Menengah', color: 'var(--warning)' };
-  return { label: 'Perlu Perhatian', color: 'var(--error)' };
-}
+function AthleteAutocomplete({ value, onChange, athleteNames }: { value: string; onChange: (value: string) => void; athleteNames: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
-function generateRichAnalysis(form: PhysicalForm, score: number) {
-  const filled = [
-    form.heartRate, form.beepTest, form.shuttleRun, form.pushUp, form.sitUp, form.backUp, form.verticalJump,
-  ].filter((v) => v !== '').length;
+  const filtered = useMemo(() => {
+    if (!query.trim()) return athleteNames;
+    return athleteNames.filter((n) => n.toLowerCase().includes(query.toLowerCase()));
+  }, [query, athleteNames]);
 
-  if (filled === 0) {
-    return {
-      title: 'Menunggu data',
-      summary: 'Mulai mengisi indikator fisik di bawah untuk mendapatkan analisis kondisi dan rekomendasi latihan secara real-time.',
-      recommendations: [] as { area: string; text: string }[],
-    };
-  }
+  const select = (name: string) => {
+    onChange(name);
+    setOpen(false);
+    setQuery('');
+  };
 
-  const tier = getScoreTier(score);
-  const recs: { area: string; text: string }[] = [];
-
-  if (form.heartRate) {
-    const hr = Number(form.heartRate);
-    if (hr > 90) {
-      recs.push({ area: 'Denyut Nadi', text: 'Denyut nadi istirahat tinggi — tingkatkan latihan kardio intensitas rendah dan pastikan pemulihan optimal antar sesi.' });
-    } else if (hr < 55) {
-      recs.push({ area: 'Denyut Nadi', text: 'Denyut nadi istirahat rendah menandakan efisiensi jantung baik. Pertahankan dengan latihan aerobik konsisten.' });
-    } else {
-      recs.push({ area: 'Denyut Nadi', text: 'Denyut nadi dalam zona ideal. Pertahankan ritme latihan saat ini dan pantau secara berkala.' });
-    }
-  }
-
-  if (form.beepTest) {
-    const bt = Number(form.beepTest);
-    if (bt >= 12) {
-      recs.push({ area: 'Daya Tahan Aerobik', text: 'Kapasitas aerobik sangat baik. Siap untuk latihan intensitas tinggi dengan interval pendek.' });
-    } else if (bt >= 9) {
-      recs.push({ area: 'Daya Tahan Aerobik', text: 'Kapasitas aerobik cukup baik. Tambahkan 1-2 sesi lari interval 30:30 per minggu untuk meningkatkan VO2max.' });
-    } else {
-      recs.push({ area: 'Daya Tahan Aerobik', text: 'Kapasitas aerobik perlu peningkatan. Fokus pada lari kontinu 20-30 menit, 3x per minggu sebelum latihan intens.' });
-    }
-  }
-
-  if (form.shuttleRun) {
-    const sr = Number(form.shuttleRun);
-    if (sr <= 10) {
-      recs.push({ area: 'Agilitas', text: 'Agilitas sangat baik. Pertahankan dengan drill zig-zag dan cone drill 2x per minggu.' });
-    } else if (sr <= 12) {
-      recs.push({ area: 'Agilitas', text: 'Agilitas cukup baik. Tambahkan latihan perubahan arah (T-drill, L-drill) untuk meningkatkan kecepatan reaksi.' });
-    } else {
-      recs.push({ area: 'Agilitas', text: 'Agilitas perlu peningkatan. Prioritaskan ladder drill dan latihan perubahan arah 3x per minggu.' });
-    }
-  }
-
-  if (form.pushUp) {
-    const pu = Number(form.pushUp);
-    if (pu >= 40) {
-      recs.push({ area: 'Kekuatan Otot Lengan', text: 'Kekuatan lengan sangat baik. Cocok untuk latihan blocking dan smash dengan beban tambahan.' });
-    } else if (pu >= 25) {
-      recs.push({ area: 'Kekuatan Otot Lengan', text: 'Kekuatan lengan cukup. Tambahkan push-up variasi (diamond, wide) dan latihan dumbbell press 2x per minggu.' });
-    } else {
-      recs.push({ area: 'Kekuatan Otot Lengan', text: 'Kekuatan lengan perlu peningkatan. Mulai dengan 3 set push-up 10-15 repetisi setiap sesi latihan.' });
-    }
-  }
-
-  if (form.sitUp) {
-    const su = Number(form.sitUp);
-    if (su >= 40) {
-      recs.push({ area: 'Kekuatan Otot Perut', text: 'Kekuatan inti sangat baik. Sangat mendukung stabilisasi tubuh saat melakukan teknik blocking dan landing.' });
-    } else if (su >= 25) {
-      recs.push({ area: 'Kekuatan Otot Perut', text: 'Kekuatan inti cukup. Tambahkan plank 30-45 detik dan Russian twist 3x per minggu.' });
-    } else {
-      recs.push({ area: 'Kekuatan Otot Perut', text: 'Kekuatan inti lemah. Fokus pada sit-up 3x15, plank 20 detik, dan dead bug setiap latihan.' });
-    }
-  }
-
-  if (form.backUp) {
-    const bu = Number(form.backUp);
-    if (bu >= 35) {
-      recs.push({ area: 'Kekuatan Otot Punggung', text: 'Kekuatan punggung sangat baik. Mendukung postur tubuh ideal untuk teknik servis dan smash.' });
-    } else if (bu >= 20) {
-      recs.push({ area: 'Kekuatan Otot Punggung', text: 'Kekuatan punggung cukup. Tambahkan back extension dan superman hold 3x per minggu.' });
-    } else {
-      recs.push({ area: 'Kekuatan Otot Punggung', text: 'Kekuatan punggung perlu peningkatan. Mulai dengan back-up 3x12 dan latihan bird-dog setiap sesi.' });
-    }
-  }
-
-  if (form.verticalJump) {
-    const vj = Number(form.verticalJump);
-    if (vj >= 60) {
-      recs.push({ area: 'Daya Ledak', text: 'Daya ledak sangat baik. Siap untuk latihan plyometric lanjutan seperti box jump dan depth jump.' });
-    } else if (vj >= 45) {
-      recs.push({ area: 'Daya Ledak', text: 'Daya ledak cukup baik. Tambahkan jump squat dan tuck jump 2x per minggu untuk meningkatkan tinggi lompatan.' });
-    } else {
-      recs.push({ area: 'Daya Ledak', text: 'Daya ledak perlu peningkatan. Fokus pada latihan plyometric dasar: jump squat 3x15, lunge jump 3x10.' });
-    }
-  }
-
-  let title: string;
-  let summary: string;
-  if (score >= 85) {
-    title = 'Kondisi Sangat Prima';
-    summary = 'Atlet berada pada puncak kesiapan fisik. Fondasi aerobik, kekuatan, dan daya ledak semuanya berada pada level sangat baik. Aman untuk memasuki fase latihan intensitas tinggi dengan volume penuh.';
-  } else if (score >= 75) {
-    title = 'Kondisi Prima';
-    summary = 'Atlet menunjukkan kesiapan fisik yang kuat untuk latihan intensif. Sebagian besar indikator berada pada level yang baik. Pertahankan konsistensi dan fokus pada area yang masih bisa dioptimalkan.';
-  } else if (score >= 65) {
-    title = 'Kondisi Cukup Siap';
-    summary = 'Atlet memiliki fondasi fisik yang cukup untuk latihan normal. Beberapa area memerlukan perhatian khusus sebelum meningkatkan intensitas. Prioritaskan pemulihan dan konsistensi latihan.';
-  } else if (score >= 50) {
-    title = 'Kondisi Menengah';
-    summary = 'Atlet memiliki fondasi fisik yang sedang berkembang. Fokus pada penguatan area yang masih lemah sebelum memasuki fase latihan kompetitif. Tingkatkan volume latihan secara bertahap.';
-  } else {
-    title = 'Perlu Perhatian Khusus';
-    summary = 'Atlet memerlukan fokus pada pembangunan fondasi fisik dasar sebelum melanjutkan ke latihan intensitas tinggi. Konsultasikan dengan pelatih untuk program pengembangan yang terstruktur.';
-  }
-
-  return { title, summary, recommendations: recs };
+  return (
+    <div className="athlete-selector">
+      <span>Nama Atlet</span>
+      <div className="athlete-input-wrap">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => { onChange(e.target.value); setQuery(e.target.value); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Ketik atau pilih atlet"
+          required
+          autoComplete="off"
+          name="athlete_name_input"
+        />
+        {open && (
+          <div className="athlete-dropdown">
+            {filtered.length === 0 ? (
+              <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-faint)' }}>Ketik nama baru atau pilih dari daftar</div>
+            ) : (
+              filtered.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); select(name); }}
+                  className={`athlete-option ${value === name ? 'selected' : ''}`}
+                >
+                  <Users size={14} />
+                  {name}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function PhysicalFormView({
@@ -296,36 +231,30 @@ export function PhysicalFormView({
   setForm,
   onSubmit,
   saving,
-  customParams,
+  indicators,
 }: {
   form: PhysicalForm;
   setForm: React.Dispatch<React.SetStateAction<PhysicalForm>>;
   onSubmit: (event: FormEvent) => void;
   saving: boolean;
-  customParams: CustomTestParam[];
+  indicators: PhysicalIndicator[];
 }) {
-  const score = scorePhysical(form);
+  const score = scorePhysical(form, indicators);
   const update = (key: keyof PhysicalForm) => (value: string) =>
     setForm((c) => ({ ...c, [key]: value }));
 
   const updateCustom = (id: string, value: string) =>
     setForm((c) => ({ ...c, customValues: { ...c.customValues, [id]: value } }));
 
-  const analysis = generateRichAnalysis(form, score);
+  const analysis = generateRichAnalysis(form, score, indicators);
   const tier = getScoreTier(score);
 
   return (
     <FormShell title="Tes Fisik Atlet" description="Catat indikator kebugaran untuk membaca kesiapan atlet secara menyeluruh." icon={<HeartPulse size={24} />}>
       <form onSubmit={onSubmit}>
         <div className="form-grid two">
-          <Field label="Nama Atlet" value={form.athleteName} onChange={update('athleteName')} placeholder="Contoh: Budi Santoso" />
-          <label className="field">
-            <span>Kelompok Tim</span>
-            <select value={form.teamGroup} onChange={(e) => update('teamGroup')(e.target.value)}>
-              <option>Tim A</option><option>Tim B</option><option>Putra</option><option>Putri</option><option>Umum</option>
-            </select>
-          </label>
-          <Field label="Tanggal Tes" type="date" value={form.date} onChange={update('date')} />
+          <Field label="Nama Atlet" value={form.athleteName} onChange={update('athleteName')} placeholder="Contoh: Budi Santoso" name="physical_athlete_name" />
+          <Field label="Tanggal Tes" type="date" value={form.date} onChange={update('date')} name="physical_date" />
         </div>
 
         <div className="form-divider">
@@ -334,35 +263,31 @@ export function PhysicalFormView({
         </div>
 
         <div className="form-grid three">
-          <Field label="Denyut Nadi" value={form.heartRate} onChange={update('heartRate')} type="number" suffix="bpm" />
-          <Field label="Beep Test" value={form.beepTest} onChange={update('beepTest')} type="number" suffix="level" />
-          <Field label="Shuttle Run Angka 8" value={form.shuttleRun} onChange={update('shuttleRun')} type="number" suffix="detik" />
-          <Field label="Push Up" value={form.pushUp} onChange={update('pushUp')} type="number" suffix="repetisi" />
-          <Field label="Sit Up" value={form.sitUp} onChange={update('sitUp')} type="number" suffix="repetisi" />
-          <Field label="Back Up" value={form.backUp} onChange={update('backUp')} type="number" suffix="repetisi" />
-          <Field label="Vertical Jump" value={form.verticalJump} onChange={update('verticalJump')} type="number" suffix="cm" />
-        </div>
-
-        {customParams.length > 0 && (
-          <>
-            <div className="form-divider">
-              <span>PARAMETER TAMBAHAN</span>
-              <small>Ditambahkan oleh pelatih</small>
+          {indicators.length === 0 ? (
+            <div style={{ gridColumn: 'span 3', padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              Belum ada indikator tes fisik yang diatur oleh pelatih.
             </div>
-            <div className="form-grid three">
-              {customParams.map((param) => (
+          ) : (
+            indicators.map((indicator) => {
+              const isBuiltin = indicator.key in form && indicator.key !== 'customValues';
+              const value = isBuiltin ? form[indicator.key as keyof PhysicalForm] : form.customValues[indicator.id];
+              const onChange = isBuiltin
+                ? update(indicator.key as keyof PhysicalForm)
+                : (v: string) => updateCustom(indicator.id, v);
+              return (
                 <Field
-                  key={param.id}
-                  label={param.name}
-                  value={form.customValues[param.id] ?? ''}
-                  onChange={(v) => updateCustom(param.id, v)}
+                  key={indicator.id}
+                  label={indicator.name}
+                  value={String(value ?? '')}
+                  onChange={onChange}
                   type="number"
-                  suffix={param.unit}
+                  suffix={indicator.unit}
+                  name={`indicator_${indicator.id}`}
                 />
-              ))}
-            </div>
-          </>
-        )}
+              );
+            })
+          )}
+        </div>
 
         <div className="rich-analysis" style={{ ['--p' as string]: score } as React.CSSProperties}>
           <div className="rich-analysis-header">
@@ -404,76 +329,37 @@ export function PhysicalFormView({
   );
 }
 
-function AthleteSelector({
-  value,
-  onChange,
-  athleteNames,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  athleteNames: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-
-  const filtered = useMemo(() => {
-    if (!query.trim()) return athleteNames;
-    return athleteNames.filter((n) => n.toLowerCase().includes(query.toLowerCase()));
-  }, [query, athleteNames]);
-
-  const select = (name: string) => {
-    onChange(name);
-    setOpen(false);
-    setQuery('');
-  };
-
-  return (
-    <div className="athlete-selector">
-      <span>Nama Atlet / Tim</span>
-      <div className="athlete-input-wrap">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Ketik atau pilih atlet"
-          required
-        />
-        {open && filtered.length > 0 && (
-          <div className="athlete-dropdown">
-            {filtered.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); select(name); }}
-                className={`athlete-option ${value === name ? 'selected' : ''}`}
-              >
-                <Users size={14} />
-                {name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function MatchFormView({
   form,
   setForm,
   onSubmit,
   saving,
   athleteNames,
+  techniqueTargets,
 }: {
   form: MatchForm;
   setForm: React.Dispatch<React.SetStateAction<MatchForm>>;
   onSubmit: (event: FormEvent) => void;
   saving: boolean;
   athleteNames: string[];
+  techniqueTargets: Record<string, number>;
 }) {
-  const score = scoreMatch(form);
+  const score = scoreMatch(form, techniqueTargets);
+
+  useEffect(() => {
+    setForm((c) => ({
+      ...c,
+      metrics: Object.fromEntries(
+        metricLabels.map((label) => [
+          label,
+          {
+            success: techniqueTargets[label] || c.metrics[label]?.success || 10,
+            error: c.metrics[label]?.error || 0,
+          },
+        ])
+      ) as Record<string, TechnicalMetric>,
+    }));
+  }, [techniqueTargets, setForm]);
 
   const updateMetric = (label: string, key: keyof TechnicalMetric, value: string) =>
     setForm((c) => ({
@@ -485,43 +371,49 @@ export function MatchFormView({
     }));
 
   return (
-    <FormShell title="Statistik Pertandingan" description="Ukur efektivitas teknik dan petakan arah landing smash dalam satu tampilan." icon={<BarChart3 size={24} />}>
+    <FormShell title="Statistik Perindividu" description="Ukur efektivitas teknik dan petakan arah landing smash dalam satu tampilan." icon={<BarChart3 size={24} />}>
       <form onSubmit={onSubmit}>
-        <div className="form-grid three">
-          <AthleteSelector
+        <div className="form-grid two">
+          <AthleteAutocomplete
             value={form.athleteName}
             onChange={(v) => setForm((c) => ({ ...c, athleteName: v }))}
             athleteNames={athleteNames}
           />
-          <label className="field">
-            <span>Kelompok Tim</span>
-            <select value={form.teamGroup} onChange={(e) => setForm((c) => ({ ...c, teamGroup: e.target.value }))}>
-              <option>Tim A</option><option>Tim B</option><option>Putra</option><option>Putri</option><option>Umum</option>
-            </select>
-          </label>
-          <Field label="Tanggal Pertandingan" type="date" value={form.date} onChange={(v) => setForm((c) => ({ ...c, date: v }))} />
+          <Field label="Tanggal Tes" type="date" value={form.date} onChange={(v) => setForm((c) => ({ ...c, date: v }))} name="match_date" />
         </div>
 
         <div className="form-divider">
           <span>STATISTIK TEKNIS</span>
-          <small>Masukkan jumlah sukses dan error</small>
+          <small>Kolom Berhasil terisi otomatis dari target admin. Error diisi manual.</small>
         </div>
 
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Teknik</th><th>Berhasil</th><th>Error</th><th>Efektivitas</th></tr>
+              <tr><th>Teknik</th><th>Berhasil (Target)</th><th>Error</th><th>Efektivitas</th></tr>
             </thead>
             <tbody>
               {metricLabels.map((label) => {
                 const metric = form.metrics[label];
-                const total = metric.success + metric.error;
+                const target = techniqueTargets[label] || 10;
+                const effectiveness = metric.success > 0 ? Math.max(0, Math.min(100, ((metric.success - metric.error) / metric.success) * 100)) : 0;
                 return (
                   <tr key={label}>
                     <td><strong>{label}</strong></td>
-                    <td><input type="number" min="0" value={metric.success} onChange={(e) => updateMetric(label, 'success', e.target.value)} /></td>
-                    <td><input type="number" min="0" value={metric.error} onChange={(e) => updateMetric(label, 'error', e.target.value)} /></td>
-                    <td><span className={`efficiency ${total && metric.success / total >= 0.7 ? 'high' : ''}`}>{total ? `${Math.round((metric.success / total) * 100)}%` : '—'}</span></td>
+                    <td>
+                      <input
+                        type="number"
+                        min="0"
+                        value={metric.success}
+                        onChange={(e) => updateMetric(label, 'success', e.target.value)}
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', borderRadius: '6px', padding: '6px 10px', width: '80px' }}
+                        autoComplete="off"
+                        name={`metric_success_${label.toLowerCase()}`}
+                      />
+                      <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '11px', marginTop: '2px' }}>Target: {target}</small>
+                    </td>
+                    <td>                      <input type="number" min="0" value={metric.error} onChange={(e) => updateMetric(label, 'error', e.target.value)} style={{ background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', borderRadius: '6px', padding: '6px 10px', width: '80px' }} autoComplete="off" name={`metric_error_${label.toLowerCase()}`} /></td>
+                    <td><span className={`efficiency ${effectiveness >= 70 ? 'high' : ''}`}>{Math.round(effectiveness)}%</span></td>
                   </tr>
                 );
               })}
@@ -573,12 +465,12 @@ export function MatchFormView({
           <div>
             <span className="section-label">MATCH EFFICIENCY</span>
             <h3>{score >= 75 ? 'Efektivitas kuat' : 'Ruang untuk berkembang'}</h3>
-            <p>Skor dihitung dari rasio keberhasilan seluruh teknik yang dicatat.</p>
+            <p>Skor dihitung dari efektivitas seluruh teknik yang dicatat.</p>
           </div>
         </div>
 
         <div className="form-footer">
-          <span><ShieldCheck size={16} /> Data pertandingan siap dianalisis</span>
+          <span><ShieldCheck size={16} /> Data Perindividu siap dianalisis</span>
           <button className="primary-btn" disabled={saving} type="submit">
             <Save size={17} />{saving ? 'Menyimpan...' : 'Simpan Statistik'} <ArrowUpRight size={16} />
           </button>
@@ -617,7 +509,7 @@ export function ArchiveView({
 
       <div className="filter-bar">
         <div className="filter-tabs">
-          {([['all', 'Semua'], ['physical', 'Tes Fisik'], ['match', 'Pertandingan']] as const).map(([id, label]) => (
+          {([['all', 'Semua'], ['physical', 'Tes Fisik'], ['match', 'Statistik Perindividu']] as const).map(([id, label]) => (
             <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}</button>
           ))}
         </div>
@@ -643,7 +535,7 @@ export function ArchiveView({
                 <span className="card-date"><CalendarDays size={13} />{formatDate(report.report_date)}</span>
               </div>
               <h3>{report.athlete_name}</h3>
-              <p>{report.team_group} <span>·</span> {report.report_type === 'physical' ? 'Tes Fisik' : 'Pertandingan'}</p>
+              <p>{report.report_type === 'physical' ? 'Tes Fisik' : 'Statistik Perindividu'}</p>
               <div className="card-bottom">
                 <div className={`score-pill ${report.readiness_score && report.readiness_score >= 75 ? 'good' : 'medium'}`}>
                   {report.readiness_score ?? 0}<small>/100</small>

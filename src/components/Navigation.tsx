@@ -22,7 +22,7 @@ type StudentNavConfig = {
 const studentNav: StudentNavConfig[] = [
   { id: 'dashboard', label: 'Ringkasan', icon: LayoutDashboard },
   { id: 'physical', label: 'Tes Fisik', icon: HeartPulse },
-  { id: 'match', label: 'Statistik Pertandingan', icon: BarChart3 },
+  { id: 'match', label: 'Statistik Perindividu', icon: BarChart3 },
   { id: 'archive', label: 'Riwayat Laporan', icon: History },
 ];
 
@@ -34,7 +34,7 @@ type AdminNavConfig = {
 
 const adminNav: AdminNavConfig[] = [
   { id: 'admin-dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'admin-approval', label: 'Antrian Persetujuan', icon: ClipboardList },
+  { id: 'admin-analysis', label: 'Analisis Data Atlet', icon: ClipboardList },
   { id: 'admin-manage', label: 'Kelola Laporan', icon: BarChart3 },
   { id: 'admin-settings', label: 'Pengaturan', icon: SettingsIcon },
 ];
@@ -77,7 +77,6 @@ export function Sidebar({
           <img src="/ABRAM.png" alt="ABRAM" />
         </div>
         <div>
-          <p className="brand-eyebrow">MF Digitalisasi</p>
           <p className="brand-name">ABRAM</p>
         </div>
         <button className="mobile-close" onClick={onCloseMobile} aria-label="Tutup menu">
@@ -110,7 +109,7 @@ export function Sidebar({
               >
                 <Icon size={19} />
                 <span>{label}</span>
-                {id === 'admin-approval' && pendingCount > 0 && (
+                {id === 'admin-analysis' && pendingCount > 0 && (
                   <span className="nav-badge">{pendingCount}</span>
                 )}
               </button>
@@ -142,7 +141,7 @@ export function Sidebar({
         </div>
         <p className="sidebar-credit">
           Dikembangkan oleh<br />
-          <strong>Muhammad Farid, S.Pd.</strong>
+          <strong>Aldo Bramudyo, S.Pd.<br />Muhammad Farid, S.Pd.</strong>
         </p>
       </div>
     </aside>
@@ -175,18 +174,18 @@ export function FloatingNav({ viewMode, tab, adminTab, pendingCount, onNavigate,
   const items = isAdmin
     ? adminNav.map((n) => ({
         id: n.id,
-        label: n.label === 'Antrian Persetujuan' ? 'Antrian' : n.label === 'Kelola Laporan' ? 'Kelola' : n.label,
+        label: n.label === 'Analisis Data Atlet' ? 'Analisis' : n.label === 'Kelola Laporan' ? 'Kelola' : n.label,
         icon: n.icon,
       }))
     : [
         { id: 'dashboard' as const, label: 'Beranda', icon: LayoutDashboard },
         { id: 'physical' as const, label: 'Tes Fisik', icon: HeartPulse },
-        { id: 'match' as const, label: 'Pertandingan', icon: BarChart3 },
+        { id: 'match' as const, label: 'Statistik', icon: BarChart3 },
         { id: 'archive' as const, label: 'Riwayat', icon: History },
       ];
 
   return (
-    <nav className="floating-nav">
+    <nav className="floating-nav" style={{ padding: '6px 10px', gap: '4px' }}>
       {items.map((item) => {
         const Icon = item.icon;
         const isActive = isAdmin ? adminTab === item.id : tab === item.id;
@@ -195,10 +194,11 @@ export function FloatingNav({ viewMode, tab, adminTab, pendingCount, onNavigate,
             key={item.id}
             onClick={() => isAdmin ? onNavigateAdmin(item.id as AdminTab) : onNavigate(item.id as Tab)}
             className={`floating-nav-item ${isActive ? 'active' : ''}`}
+            style={{ padding: '4px 8px', minWidth: '55px' }}
           >
-            <Icon size={22} />
-            <span>{item.label}</span>
-            {isAdmin && item.id === 'admin-approval' && pendingCount > 0 && (
+            <Icon size={18} />
+            <span style={{ fontSize: '10px', marginTop: '2px' }}>{item.label}</span>
+            {isAdmin && item.id === 'admin-analysis' && pendingCount > 0 && (
               <span className="floating-nav-badge">{pendingCount}</span>
             )}
           </button>

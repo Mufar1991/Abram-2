@@ -494,20 +494,147 @@ tbody td input:focus { outline: none; border-color: var(--border-focus); }
   .recommendation-item { padding: 10px 12px; }
 }
 
-/* ===== PRINT ===== */
+/* ===== COMPREHENSIVE REPORT MODAL ===== */
+.comprehensive-modal { max-width: 900px; }
+.comprehensive-report h2 { font-size: 24px; }
+.comprehensive-report .detail-section { margin-bottom: 28px; }
+.comprehensive-report .detail-section h3 { font-size: 16px; }
+.comprehensive-report .score-pill { font-size: 13px; padding: 4px 10px; }
+
+/* ===== PRINT / CETAK PDF LAPORAN MANUAL YANG RAPI & BERSIH ===== */
 @media print {
-  body { background: #fff !important; color: #000 !important; }
-  .sidebar, .topbar, .mobile-overlay, .modal-actions, .notice, .report-footer button, .floating-nav, .app-footer, .admin-banner { display: none !important; }
-  .main-shell { margin: 0 !important; padding: 0 !important; }
-  .modal-backdrop { position: static; background: none; backdrop-filter: none; padding: 0; display: block; }
-  .report-modal { max-width: 100%; max-height: none; border: 0; border-radius: 0; box-shadow: none; background: #fff !important; overflow: visible; }
-  .report-modal-head { position: static; background: #fff !important; border-bottom: 2px solid #000; padding: 0 0 12px; }
-  .report-brand strong, .report-brand span, .print-report h2, .detail-section h3, .detail-grid strong, .report-score-banner strong, .score-banner-note, .report-meta span, .report-kicker, .report-signature strong, .report-signature span { color: #000 !important; }
-  .report-brand span, .report-meta span, .detail-grid span, .report-score-banner span, .detail-grid strong small, .report-score-banner strong small { color: #444 !important; }
-  .report-score-banner, .detail-grid > div, .selected-zones span, .coach-notes-box, .report-signature { background: #f5f5f5 !important; border: 1px solid #ddd !important; }
-  .score-banner-note svg { color: #000 !important; }
-  .report-footer { border-top: 2px solid #000; }
-  .report-footer span, .report-footer strong { color: #000 !important; }
-  .print-report { padding: 12px 0 0; }
-  .detail-grid { grid-template-columns: repeat(3, 1fr); }
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  
+  /* Sembunyikan seluruh elemen antarmuka aplikasi */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Hanya tampilkan modal laporan murni */
+  .report-modal, .report-modal *, .comprehensive-report, .comprehensive-report * {
+    visibility: visible !important;
+  }
+  
+  .report-modal, .comprehensive-modal {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Sembunyikan tombol, navigasi, dan header halaman browser */
+  .report-modal-head, .modal-actions, .report-footer button, .sidebar, .topbar, .floating-nav, .app-footer, .admin-banner, .mobile-overlay, .mobile-menu-btn {
+    display: none !important;
+  }
+
+  /* Tata letak dokumen resmi agar rapi, tidak bertumpuk, dan bersih */
+  .print-report, .comprehensive-report {
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .report-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    border-bottom: 2px solid #000000 !important;
+    padding-bottom: 12px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .report-brand img {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .report-brand strong, .report-brand span {
+    color: #000000 !important;
+  }
+
+  h2 {
+    font-size: 20pt !important;
+    color: #000000 !important;
+    margin: 10px 0 !important;
+  }
+
+  h3 {
+    color: #000000 !important;
+    font-size: 12pt !important;
+    border-bottom: 1px solid #ccc !important;
+    padding-bottom: 4px !important;
+  }
+
+  .report-meta {
+    display: flex !important;
+    gap: 20px !important;
+    margin-bottom: 16px !important;
+    font-size: 11pt !important;
+    color: #333333 !important;
+  }
+
+  .report-score-banner {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 16px !important;
+    margin-bottom: 20px !important;
+    border-radius: 8px !important;
+    break-inside: avoid;
+  }
+
+  .report-score-banner strong {
+    color: #000000 !important;
+    font-size: 32pt !important;
+  }
+
+  .score-banner-note, .coach-notes-box, .detail-grid > div, .recommendation-item {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #000000 !important;
+    break-inside: avoid;
+  }
+
+  .detail-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .report-signature {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    margin-top: 24px !important;
+    break-inside: avoid;
+  }
+
+  .report-footer {
+    border-top: 2px solid #000000 !important;
+    margin-top: 30px !important;
+    padding-top: 12px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    break-inside: avoid;
+  }
+
+  .report-footer span, .report-footer strong {
+    color: #000000 !important;
+  }
+  
+  .detail-section {
+    break-inside: avoid;
+  }
 }

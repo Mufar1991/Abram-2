@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  BarChart3,
   CalendarDays,
   Check,
   Clock3,
@@ -12,14 +11,15 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import type { CustomTestParam, Report, ReportStatus, TechnicalMetric } from '@/lib/types';
+import type { CustomTestParam, Report, TechnicalMetric } from '@/lib/types';
 import {
-  displayPayload,
   formatDate,
   getCustomValuesFromPayload,
   getMetricsFromPayload,
   getZonesFromPayload,
+  getAnalysisFromPayload,
   metricLabels,
+  triggerPrint,
 } from '@/lib/utils';
 
 export function PinModal({
@@ -36,27 +36,31 @@ export function PinModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="pin-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="pin-logo">
-          <img src="/ABRAM.png" alt="ABRAM" />
+        <div className="pin-head">
+          <div className="pin-icon"><ShieldCheck size={22} /></div>
+          <div>
+            <h3>Akses Mode Pelatih</h3>
+            <p>Masukkan PIN untuk masuk ke panel kontrol admin.</p>
+          </div>
+          <button onClick={onClose} aria-label="Tutup"><X size={18} /></button>
         </div>
-        <h2>Akses Mode Pelatih</h2>
-        <p>Masukkan PIN untuk mengakses dashboard dan alat manajemen.</p>
-        <input
-          className="pin-input"
-          type="password"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') onSubmit(pin); }}
-          placeholder="••••••"
-          maxLength={10}
-          autoFocus
-        />
-        {error && <p className="pin-error">{error}</p>}
-        <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-          <button className="secondary-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Batal</button>
-          <button className="primary-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => onSubmit(pin)}>Masuk</button>
-        </div>
-        <p className="pin-hint">Default: 1234 — Ubah di Pengaturan setelah masuk.</p>
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(pin); }}>
+          <div className="input-wrap">
+            <input
+              type="password"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="Masukkan PIN (default: 1234)"
+              maxLength={10}
+              autoFocus
+              required
+              autoComplete="current-password"
+              name="admin_access_pin"
+            />
+          </div>
+          {error && <span className="pin-error">{error}</span>}
+          <button className="primary-btn" type="submit">Masuk Admin</button>
+        </form>
       </div>
     </div>
   );
@@ -66,17 +70,24 @@ export function ReportDetail({
   report,
   coachName,
   customParams,
+  techniqueTargets,
   onClose,
 }: {
   report: Report;
   coachName: string;
   customParams: CustomTestParam[];
+  techniqueTargets: Record<string, number>;
   onClose: () => void;
 }) {
-  const payload = report.payload;
-  const metrics = getMetricsFromPayload(payload);
-  const zones = getZonesFromPayload(payload);
-  const customValues = getCustomValuesFromPayload(payload);
+  const isPhysical = report.report_type === 'physical';
+  const analysis = getAnalysisFromPayload(report.payload);
+  const customValues = getCustomValuesFromPayload(report.payload);
+  const metrics = getMetricsFromPayload(report.payload);
+  const zones = getZonesFromPayload(report.payload);
+
+  const handlePrint = () => {
+    triggerPrint(`Laporan_${report.report_type}_${report.athlete_name.replace(/\s+/g, '_')}`);
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -90,83 +101,116 @@ export function ReportDetail({
             </div>
           </div>
           <div className="modal-actions">
-            <button onClick={() => window.print()} title="Cetak laporan"><Printer size={18} /></button>
+            <button onClick={handlePrint} title="Cetak laporan"><Printer size={18} /></button>
             <button onClick={onClose} title="Tutup"><X size={19} /></button>
           </div>
         </div>
 
         <div className="print-report">
           <div className="report-kicker">
-            {report.report_type === 'physical' ? 'PHYSICAL ASSESSMENT' : 'MATCH PERFORMANCE REPORT'}
+            {isPhysical ? 'PHYSICAL ASSESSMENT REPORT' : 'MATCH STATISTICS REPORT'}
           </div>
-          <h2>{report.athlete_name}</h2>
+          <h2>{isPhysical ? 'Laporan Tes Fisik Atlet' : 'Laporan Statistik Perindividu'}</h2>
           <div className="report-meta">
-            <span><Users size={14} />{report.team_group}</span>
-            <span><CalendarDays size={14} />{formatDate(report.report_date)}</span>
-            <span><Clock3 size={14} />Laporan publik</span>
+            <span><Users size={14} />{report.athlete_name}</span>
+            <span><CalendarDays size={14} />{report.report_date ? formatDate(report.report_date) : '—'}</span>
+            <span><Clock3 size={14} />{report.status === 'approved' ? 'Disetujui' : 'Pending'}</span>
           </div>
 
           <div className="report-score-banner">
             <div>
-              <span>PERFORMANCE SCORE</span>
+              <span>SKOR KINERJA</span>
               <strong>{report.readiness_score ?? 0}<small>/ 100</small></strong>
             </div>
-            <div className="score-banner-note">
-              <ShieldCheck size={17} />{displayPayload(payload, 'analysis')}
-            </div>
+            {analysis && (
+              <div className="score-banner-note">
+                <ShieldCheck size={17} />
+                <div>
+                  <strong>{analysis.title}</strong>
+                  <p>{analysis.summary}</p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {report.report_type === 'physical' ? (
+          {isPhysical ? (
             <div className="detail-section">
-              <h3><HeartPulse size={18} />Breakdown tes fisik</h3>
-              <div className="detail-grid">
-                {([
-                  ['Denyut Nadi', 'heartRate', 'bpm'],
-                  ['Beep Test', 'beepTest', 'level'],
-                  ['Shuttle Run Angka 8', 'shuttleRun', 'detik'],
-                  ['Push Up', 'pushUp', 'repetisi'],
-                  ['Sit Up', 'sitUp', 'repetisi'],
-                  ['Back Up', 'backUp', 'repetisi'],
-                  ['Vertical Jump', 'verticalJump', 'cm'],
-                ] as const).map(([label, key, unit]) => (
-                  <div key={key}>
-                    <span>{label}</span>
-                    <strong>{displayPayload(payload, key)} <small>{unit}</small></strong>
-                  </div>
-                ))}
-              </div>
-
-              {customParams.length > 0 && (
-                <>
-                  <h3 style={{ marginTop: '20px' }}><HeartPulse size={18} />Parameter tambahan</h3>
-                  <div className="detail-grid">
-                    {customParams.map((param) => (
+              <h3><HeartPulse size={18} />Parameter Tes Fisik</h3>
+              <div className="detail-grid" style={{ marginTop: '12px' }}>
+                {customParams.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Tidak ada parameter tes fisik yang aktif.</p>
+                ) : (
+                  customParams.map((param) => {
+                    // Ambil nilai dari customValues atau payload langsung jika itu properti bawaan lama
+                    const val = customValues[param.id] ?? (report.payload as Record<string, unknown>)[param.id] ?? '—';
+                    return (
                       <div key={param.id}>
                         <span>{param.name}</span>
-                        <strong>{customValues[param.id] ?? '—'} <small>{param.unit}</small></strong>
+                        <strong>{String(val)} <small>{param.unit}</small></strong>
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
           ) : (
             <div className="detail-section">
-              <h3><BarChart3 size={18} />Breakdown statistik teknik</h3>
-              <div className="detail-grid">
-                {metricLabels.map((label) => {
-                  const metric = metrics[label] ?? { success: 0, error: 0 };
-                  return (
-                    <div key={label}>
-                      <span>{label}</span>
-                      <strong>{metric.success} <small>berhasil</small> / {metric.error} <small>error</small></strong>
-                    </div>
-                  );
-                })}
+              <h3><Target size={18} />Statistik Teknis Perindividu</h3>
+              <div className="manage-table" style={{ marginTop: '12px' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Teknik</th>
+                      <th>Berhasil (Target)</th>
+                      <th>Error</th>
+                      <th>Efektivitas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metricLabels.map((label) => {
+                      const metric = metrics[label] ?? { success: 0, error: 0 };
+                      const target = techniqueTargets[label] || 10;
+                      const success = metric.success > 0 ? metric.success : target;
+                      const error = metric.error || 0;
+                      const effectiveness = success > 0 ? Math.max(0, Math.min(100, ((success - error) / success) * 100)) : 0;
+                      return (
+                        <tr key={label}>
+                          <td><strong>{label}</strong></td>
+                          <td>{success} <small>(target: {target})</small></td>
+                          <td>{error}</td>
+                          <td><span className={`score-pill ${effectiveness >= 75 ? 'good' : 'medium'}`}>{Math.round(effectiveness)}%</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <h3 className="zone-detail-title"><Target size={18} />Zona landing smash</h3>
-              <div className="selected-zones">
-                {zones.length ? zones.map((zone) => <span key={zone}>Zona {zone}</span>) : <span>Belum ada zona yang dipilih</span>}
+
+              {zones.length > 0 && (
+                <div style={{ marginTop: '20px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Zona Landing Smash Terpilih</span>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    {zones.map((z) => (
+                      <span key={z} style={{ padding: '6px 12px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 600 }}>
+                        Zona {z}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {analysis && analysis.recommendations.length > 0 && (
+            <div className="detail-section">
+              <h3><Target size={18} />Rekomendasi Latihan</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                {analysis.recommendations.map((rec, i) => (
+                  <div key={i} style={{ padding: '12px 16px', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                    <strong style={{ color: 'var(--accent)', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{rec.area}</strong>
+                    <p style={{ margin: '4px 0 0', fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{rec.text}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -174,14 +218,13 @@ export function ReportDetail({
           {report.coach_notes && (
             <div className="detail-section">
               <h3><ShieldCheck size={18} />Catatan Pelatih</h3>
-              <div className="coach-notes-box">
-                <p>{report.coach_notes}</p>
-              </div>
+              <p style={{ marginTop: '8px', fontSize: '14px', color: 'var(--text-secondary)', padding: '12px 16px', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                {report.coach_notes}
+              </p>
             </div>
           )}
 
           <div className="report-signature">
-            <img src="/ABRAM.png" alt="ABRAM" />
             <div>
               <span>Dievaluasi & Disahkan oleh</span>
               <strong>{coachName}</strong>
@@ -190,8 +233,8 @@ export function ReportDetail({
 
           <div className="report-footer">
             <img src="/ABRAM.png" alt="ABRAM" />
-            <span>Analisis Tes & Pertandingan Bola Voli<br /><strong>{coachName}</strong></span>
-            <button onClick={() => window.print()}><Download size={15} />Cetak / Simpan PDF</button>
+            <span>Analisis Performa Bola Voli<br /><strong>{coachName}</strong></span>
+            <button onClick={handlePrint}><Download size={15} />Cetak / Simpan PDF</button>
           </div>
         </div>
       </article>
@@ -209,88 +252,77 @@ export function EditModal({
   onClose: () => void;
 }) {
   const [athleteName, setAthleteName] = useState(report.athlete_name);
-  const [teamGroup, setTeamGroup] = useState(report.team_group);
+  const [teamGroup, setTeamGroup] = useState(report.team_group ?? '');
   const [reportDate, setReportDate] = useState(report.report_date);
   const [score, setScore] = useState(String(report.readiness_score ?? 0));
-  const [status, setStatus] = useState<ReportStatus>(report.status);
-  const [coachNotes, setCoachNotes] = useState(report.coach_notes ?? '');
+  const [status, setStatus] = useState(report.status);
+  const [notes, setNotes] = useState(report.coach_notes ?? '');
 
-  const handleSave = () => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     onSave({
       ...report,
-      athlete_name: athleteName,
-      team_group: teamGroup,
+      athlete_name: athleteName.trim(),
+      team_group: teamGroup.trim(),
       report_date: reportDate,
       readiness_score: Number(score),
       status,
-      coach_notes: coachNotes,
+      coach_notes: notes.trim(),
     });
   };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="report-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-        <div className="report-modal-head">
-          <div className="report-brand">
-            <strong>Edit Laporan</strong>
+      <div className="pin-modal" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+        <div className="pin-head">
+          <div className="pin-icon"><Check size={22} /></div>
+          <div>
+            <h3>Edit Laporan Atlet</h3>
+            <p>Perbarui informasi atau skor laporan atlet.</p>
           </div>
-          <div className="modal-actions">
-            <button onClick={onClose}><X size={19} /></button>
-          </div>
+          <button onClick={onClose} aria-label="Tutup"><X size={18} /></button>
         </div>
-
-        <div style={{ padding: '28px 30px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
           <label className="field">
             <span>Nama Atlet</span>
             <div className="input-wrap">
-              <input type="text" value={athleteName} onChange={(e) => setAthleteName(e.target.value)} />
+              <input type="text" value={athleteName} onChange={(e) => setAthleteName(e.target.value)} required autoComplete="off" name="edit_athlete_name" />
             </div>
           </label>
-
-          <div className="form-grid two">
+          <div className="form-grid two" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field">
-              <span>Kelompok Tim</span>
-              <select value={teamGroup} onChange={(e) => setTeamGroup(e.target.value)}>
-                <option>Tim A</option><option>Tim B</option><option>Putra</option><option>Putri</option><option>Umum</option>
-              </select>
+              <span>Tanggal Laporan</span>
+              <div className="input-wrap">
+                <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} required name="edit_report_date" />
+              </div>
             </label>
             <label className="field">
-              <span>Tanggal</span>
+              <span>Skor Kinerja</span>
               <div className="input-wrap">
-                <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
+                <input type="number" min="0" max="100" value={score} onChange={(e) => setScore(e.target.value)} required name="edit_score" />
               </div>
             </label>
           </div>
-
-          <div className="form-grid two">
-            <label className="field">
-              <span>Skor (0-100)</span>
-              <div className="input-wrap">
-                <input type="number" min="0" max="100" value={score} onChange={(e) => setScore(e.target.value)} />
-              </div>
-            </label>
+          <div className="form-grid two" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <label className="field">
               <span>Status</span>
-              <select value={status} onChange={(e) => setStatus(e.target.value as ReportStatus)}>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
+              <div className="input-wrap">
+                <select value={status} onChange={(e) => setStatus(e.target.value as Report['status'])} name="edit_status" style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', padding: '10px 12px', borderRadius: '8px' }}>
+                  <option value="approved">Approved</option>
+                  <option value="pending">Pending</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            </label>
+            <label className="field">
+              <span>Catatan Pelatih</span>
+              <div className="input-wrap">
+                <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} autoComplete="off" name="edit_coach_notes" />
+              </div>
             </label>
           </div>
-
-          <label className="field">
-            <span>Catatan Pelatih</span>
-            <textarea value={coachNotes} onChange={(e) => setCoachNotes(e.target.value)} placeholder="Tambahkan catatan evaluasi untuk atlet ini..." />
-          </label>
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-            <button className="secondary-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Batal</button>
-            <button className="primary-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={handleSave}>
-              <Check size={17} />Simpan Perubahan
-            </button>
-          </div>
-        </div>
+          <button className="primary-btn" type="submit" style={{ marginTop: '10px' }}><Check size={16} />Simpan Perubahan</button>
+        </form>
       </div>
     </div>
   );

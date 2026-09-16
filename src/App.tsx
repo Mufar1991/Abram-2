@@ -1,16 +1,18 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState, useRef } from 'react';
 import { Moon, ShieldCheck, Sun, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import {
+  buildAllIndicators,
   initialMatch,
   initialPhysical,
-  matchAnalysis,
-  physicalAnalysis,
   scoreMatch,
   scorePhysical,
   simpleHash,
   exportToExcel,
   today,
+  generateRichAnalysis,
+  generateMatchAnalysis,
+  normalizeCustomParams,
 } from '@/lib/utils';
 import type {
   AdminTab,
@@ -18,17 +20,19 @@ import type {
   CustomTestParam,
   MatchForm,
   PhysicalForm,
+  PhysicalIndicator,
   Report,
   Tab,
   ViewMode,
 } from '@/lib/types';
 import { Sidebar, FloatingNav, MobileMenuButton } from '@/components/Navigation';
 import { Dashboard, PhysicalFormView, MatchFormView, ArchiveView } from '@/components/StudentViews';
-import { AdminDashboard, ApprovalQueue, ManageView, SettingsView } from '@/components/AdminViews';
+import { AdminDashboard, AthleteAnalysisView, ManageView, SettingsView } from '@/components/AdminViews';
 import { PinModal, ReportDetail, EditModal } from '@/components/Modals';
 
 const cacheKey = 'abram-volleyball-reports';
 const themeKey = 'abram-volleyball-theme';
+const settingsCacheKey = 'abram-volleyball-settings';
 
 function readCache(): Report[] {
   try {
@@ -40,6 +44,19 @@ function readCache(): Report[] {
 
 function writeCache(reports: Report[]): void {
   localStorage.setItem(cacheKey, JSON.stringify(reports));
+}
+
+function readSettingsCache(): CoachSettings | null {
+  try {
+    const raw = localStorage.getItem(settingsCacheKey);
+    return raw ? JSON.parse(raw) as CoachSettings : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSettingsCache(settings: CoachSettings): void {
+  localStorage.setItem(settingsCacheKey, JSON.stringify(settings));
 }
 
 function App() {
@@ -61,6 +78,7 @@ function App() {
   const [mobileNav, setMobileNav] = useState(false);
   const [pinModal, setPinModal] = useState(false);
   const [pinError, setPinError] = useState('');
+  const saveLockRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -86,7 +104,20 @@ function App() {
         writeCache(reportData as Report[]);
       }
 
-      setSettings(settingsData as CoachSettings | null);
+      const loadedSettings = settingsData || readSettingsCache();
+      if (loadedSettings) {
+        // PERBAIKAN MUTLAK: Ambil murni custom_params apa adanya (bisa berupa array kosong []), 
+        // sehingga jika admin menghapus semuanya, sistem tidak memaksa memunculkan indikator bawaan.
+        let customParams = Array.isArray(loadedSettings.custom_params) ? loadedSettings.custom_params : [];
+        
+        const normalized = {
+          ...loadedSettings,
+          custom_params: customParams,
+          technique_targets: loadedSettings.technique_targets || {},
+        } as CoachSettings;
+        setSettings(normalized);
+        writeSettingsCache(normalized);
+      }
       setLoading(false);
     };
     load();
@@ -105,8 +136,15 @@ function App() {
     ? Math.round(approvedReports.reduce((s, r) => s + (r.readiness_score ?? 0), 0) / approvedReports.length)
     : 0;
 
-  const customParams: CustomTestParam[] = settings?.custom_params ?? [];
-  const coachName = settings?.coach_name ?? 'Muhammad Farid, S.Pd.';
+  // Jika customParams kosong ([]), maka allIndicators otomatis bernilai kosong ([]), 
+  // membuat form siswa ikut kosong total tanpa indikator kaku.
+  const customParams = useMemo(() => normalizeCustomParams(settings?.custom_params ?? []), [settings?.custom_params]);
+  const allIndicators: PhysicalIndicator[] = useMemo(
+    () => buildAllIndicators(customParams),
+    [customParams]
+  );
+  const techniqueTargets: Record<string, number> = settings?.technique_targets ?? {};
+  const coachName = settings?.coach_name ?? 'Aldo Bramudyo, S.Pd.';
   const athleteNames = useMemo(
     () => Array.from(new Set(reports.map((r) => r.athlete_name))).sort(),
     [reports]
@@ -133,7 +171,7 @@ function App() {
       const next = [data as Report, ...reports];
       setReports(next);
       writeCache(next);
-      showNotice('Laporan berhasil masuk ke arsip. Menunggu persetujuan pelatih.');
+      showNotice('Mantap Surantap. Data langsung tersimpan dan muncul di arsip publik.');
     }
     setSaving(false);
     setTab('archive');
@@ -142,16 +180,17 @@ function App() {
   const submitPhysical = async (event: FormEvent) => {
     event.preventDefault();
     if (!physical.athleteName.trim() || !physical.date) return;
-    const score = scorePhysical(physical);
+    const score = scorePhysical(physical, allIndicators);
+    const analysis = generateRichAnalysis(physical, score, allIndicators);
     await saveReport({
       report_type: 'physical',
       athlete_name: physical.athleteName.trim(),
-      team_group: physical.teamGroup,
+      team_group: '',
       report_date: physical.date,
       readiness_score: score,
-      status: 'pending',
+      status: 'approved',
       coach_notes: '',
-      payload: { ...physical, analysis: physicalAnalysis(score), score },
+      payload: { ...physical, analysis, score },
     });
     setPhysical({ ...initialPhysical, customValues: {} });
   };
@@ -159,16 +198,17 @@ function App() {
   const submitMatch = async (event: FormEvent) => {
     event.preventDefault();
     if (!match.athleteName.trim() || !match.date) return;
-    const score = scoreMatch(match);
+    const score = scoreMatch(match, techniqueTargets);
+    const analysis = generateMatchAnalysis(match, score, techniqueTargets);
     await saveReport({
       report_type: 'match',
       athlete_name: match.athleteName.trim(),
-      team_group: match.teamGroup,
+      team_group: '',
       report_date: match.date,
       readiness_score: score,
-      status: 'pending',
+      status: 'approved',
       coach_notes: '',
-      payload: { ...match, analysis: matchAnalysis(score), score },
+      payload: { ...match, analysis, score },
     });
     setMatch(initialMatch);
   };
@@ -229,22 +269,54 @@ function App() {
     }
   };
 
-  const saveSettings = async (coachNameVal: string, pin: string, params: CustomTestParam[]) => {
-    const updateData: Record<string, unknown> = {
+  const saveSettings = async (coachNameVal: string, pin: string, params: CustomTestParam[], targets: Record<string, number>) => {
+    if (saveLockRef.current) return;
+
+    const applyLocal = (data?: CoachSettings) => {
+      setSettings((prev) => {
+        const next = data || (prev
+          ? { ...prev, coach_name: coachNameVal, custom_params: params, technique_targets: targets, pin_hash: pin ? simpleHash(pin) : prev.pin_hash }
+          : prev);
+        if (next) writeSettingsCache(next);
+        return next;
+      });
+      showNotice('Pengaturan berhasil disimpan permanen.');
+    };
+
+    if (!settings?.id) {
+      applyLocal();
+      return;
+    }
+
+    saveLockRef.current = true;
+    
+    const cleanPayload: Record<string, unknown> = {
       coach_name: coachNameVal,
-      custom_params: params,
+      custom_params: params, // Ini menyimpan array termasuk array kosong [] jika semua dihapus
+      technique_targets: targets,
       updated_at: new Date().toISOString(),
     };
-    if (pin) updateData.pin_hash = simpleHash(pin);
+    if (pin) cleanPayload.pin_hash = simpleHash(pin);
 
-    const { data, error } = await supabase.from('coach_settings').update(updateData).eq('id', settings?.id).select().maybeSingle();
-    if (!error && data) {
-      setSettings(data as CoachSettings);
-    } else {
-      setSettings((prev) => prev
-        ? { ...prev, coach_name: coachNameVal, custom_params: params, pin_hash: pin ? simpleHash(pin) : prev.pin_hash }
-        : prev
-      );
+    try {
+      const { data, error } = await supabase
+        .from('coach_settings')
+        .update(cleanPayload)
+        .eq('id', settings.id)
+        .select()
+        .maybeSingle();
+
+      if (!error && data) {
+        applyLocal(data as CoachSettings);
+      } else {
+        applyLocal();
+      }
+    } catch {
+      applyLocal();
+    } finally {
+      setTimeout(() => {
+        saveLockRef.current = false;
+      }, 1000);
     }
   };
 
@@ -266,7 +338,7 @@ function App() {
   };
 
   const handleExport = () => {
-    exportToExcel(reports, `ABRAM_laporan_${today}.csv`);
+    exportToExcel(reports, `ABRAM_laporan_${today}.xlsx`);
   };
 
   const handleFooterDoubleClick = () => {
@@ -301,16 +373,16 @@ function App() {
           <div className="topbar-bg" />
           <MobileMenuButton onClick={() => setMobileNav(true)} />
           <div>
-            <p className="top-kicker">Performance intelligence / 2026</p>
+            <p className="top-kicker">Performance intelligence / MF Digitalisasi </p>
             <h1>
               {viewMode === 'admin'
                 ? adminTab === 'admin-dashboard' ? 'Dashboard Pelatih'
-                  : adminTab === 'admin-approval' ? 'Antrian Persetujuan'
-                  : adminTab === 'admin-manage' ? 'Kelola Laporan'
-                  : 'Pengaturan'
+                : adminTab === 'admin-analysis' ? 'Analisis Data Atlet'
+                : adminTab === 'admin-manage' ? 'Kelola Laporan'
+                : 'Pengaturan'
                 : tab === 'dashboard' ? 'Ringkasan'
                 : tab === 'physical' ? 'Tes Fisik'
-                : tab === 'match' ? 'Statistik Pertandingan'
+                : tab === 'match' ? 'Statistik Perindividu'
                 : 'Riwayat Laporan'}
             </h1>
           </div>
@@ -346,7 +418,7 @@ function App() {
                 setForm={setPhysical}
                 onSubmit={submitPhysical}
                 saving={saving}
-                customParams={customParams}
+                indicators={allIndicators}
               />
             )}
             {tab === 'match' && (
@@ -356,6 +428,7 @@ function App() {
                 onSubmit={submitMatch}
                 saving={saving}
                 athleteNames={athleteNames}
+                techniqueTargets={techniqueTargets}
               />
             )}
             {tab === 'archive' && (
@@ -371,12 +444,12 @@ function App() {
         {viewMode === 'admin' && (
           <>
             {adminTab === 'admin-dashboard' && <AdminDashboard reports={reports} onExport={handleExport} />}
-            {adminTab === 'admin-approval' && (
-              <ApprovalQueue
+            {adminTab === 'admin-analysis' && (
+              <AthleteAnalysisView
                 reports={reports}
-                onApprove={(id) => updateReportStatus(id, 'approved')}
-                onReject={(id) => updateReportStatus(id, 'rejected')}
-                onView={setSelected}
+                coachName={coachName}
+                customParams={customParams}
+                techniqueTargets={techniqueTargets}
               />
             )}
             {adminTab === 'admin-manage' && (
@@ -398,7 +471,7 @@ function App() {
 
         <footer className="app-footer">
           <p onDoubleClick={handleFooterDoubleClick}>
-            &copy; 2026 &bull; Muhammad Farid, S.Pd. | MF Digitalisasi
+            &copy; 2026 &bull; Aldo Bramudyo, S.Pd in collaboration with Muhammad Farid, S.Pd. | MF Digitalisasi
           </p>
         </footer>
       </main>
@@ -425,6 +498,7 @@ function App() {
           report={selected}
           coachName={coachName}
           customParams={customParams}
+          techniqueTargets={techniqueTargets}
           onClose={() => setSelected(null)}
         />
       )}
